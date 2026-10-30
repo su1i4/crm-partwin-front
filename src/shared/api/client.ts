@@ -26,6 +26,8 @@ interface ApiHooks {
   getToken: () => string | null;
   getStoreId: () => string | null;
   getRefresh?: () => string | null;
+  /** Сеанс поддержки платформы: токен не обновляется (иначе refresh-cookie этого браузера подменит вход) */
+  noRefresh?: () => boolean;
   onToken: (token: string) => void;
   onAuthLost: () => void;
 }
@@ -74,7 +76,7 @@ api.interceptors.response.use(
     else if (error.response) markNetwork(true);
     const cfg = error.config as (InternalAxiosRequestConfig & { _retried?: boolean; _skipAuthRetry?: boolean }) | undefined;
     const status = error.response?.status ?? 0;
-    if (status === 401 && cfg && !cfg._retried && !cfg._skipAuthRetry && !cfg.url?.startsWith('/auth/login')) {
+    if (status === 401 && cfg && !cfg._retried && !cfg._skipAuthRetry && !cfg.url?.startsWith('/auth/login') && !hooks.noRefresh?.()) {
       cfg._retried = true;
       try {
         const token = await refreshToken();
@@ -84,6 +86,7 @@ api.interceptors.response.use(
         hooks.onAuthLost();
       }
     }
+    if (status === 401 && hooks.noRefresh?.()) hooks.onAuthLost();
     const body = error.response?.data;
     if (body && typeof body === 'object' && 'code' in body) {
       return Promise.reject(new ApiError(status, body.code, body.message, body.details));

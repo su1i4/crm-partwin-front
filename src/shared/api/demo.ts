@@ -1,5 +1,6 @@
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { createDemoAdmin } from './demo-admin';
+import { createDemoPlatform } from './demo-platform';
 import { createDemoPos } from './demo-pos';
 import { createDemoCrm } from './demo-crm';
 import { createDemoPurchasing } from './demo-purchasing';
@@ -238,6 +239,7 @@ let stock: ReturnType<typeof createDemoStock> | null = null;
 let purchasing: ReturnType<typeof createDemoPurchasing> | null = null;
 let crm: ReturnType<typeof createDemoCrm> | null = null;
 let admin: ReturnType<typeof createDemoAdmin> | null = null;
+let platform: ReturnType<typeof createDemoPlatform> | null = null;
 
 export const demoAdapter: AxiosAdapter = async (config) => {
   pos ??= createDemoPos(products, stores[0].id);
@@ -245,6 +247,7 @@ export const demoAdapter: AxiosAdapter = async (config) => {
   purchasing ??= createDemoPurchasing(products, stores[0].id, stock);
   crm ??= createDemoCrm(products, stores[0].id, cats, stock);
   admin ??= createDemoAdmin(products, stores, user, { stock, crm, pos });
+  platform ??= createDemoPlatform(uid(21));
   // Имитация обрыва связи: браузер офлайн → запрос «не дошёл»
   if (!navigator.onLine) return Promise.reject(Object.assign(new Error('Network Error'), { isAxiosError: true, code: 'ERR_NETWORK', config }));
   await new Promise((r) => setTimeout(r, 180 + Math.random() * 220));
@@ -252,6 +255,27 @@ export const demoAdapter: AxiosAdapter = async (config) => {
   const method = (config.method ?? 'get').toLowerCase();
   const params = (config.params ?? {}) as Record<string, string>;
   const body = typeof config.data === 'string' ? JSON.parse(config.data || '{}') : (config.data ?? {});
+  const auth = String(config.headers?.Authorization ?? '');
+
+  // Админка платформы и доступ поддержки
+  const pl = await platform.handle(url, method, params, body, auth);
+  if (pl) return 'error' in pl ? fail(config, pl.error.status, pl.error.code, pl.error.message) : ok(config, pl.data, pl.status);
+  // Вкладка поддержки: токен сеанса вместо токена сотрудника
+  const ss = platform.supportSession(auth);
+  if (auth.includes('demo-support')) {
+    if (!ss || ss.status !== 'active' || new Date(ss.expiresAt) < new Date()) return fail(config, 401, 'SUPPORT_SESSION_ENDED', 'Сеанс поддержки завершён');
+    if (!ss.canWrite && method !== 'get') return fail(config, 403, 'FORBIDDEN', 'Сеанс поддержки — только просмотр');
+    if (url === 'auth/me') {
+      const hidden = ['products.view_cost', 'money.read', 'money.write', 'money.verify_transfers', 'reports.money', 'reports.profit', 'dashboard.owner'];
+      const m = me();
+      return ok(config, {
+        ...m,
+        user: { ...m.user, id: 'support', name: `Поддержка · ${ss.adminName}` },
+        membership: { ...m.membership!, isOwner: false, roles: [], permissions: m.membership!.permissions.filter((x) => ss.showMoney || !hidden.includes(x)) },
+        support: { sessionId: ss.id, canWrite: ss.canWrite, showMoney: ss.showMoney, expiresAt: ss.expiresAt },
+      });
+    }
+  }
 
   if (method === 'post' && url === 'auth/login') {
     if (!body.password || body.password.length < 3) return fail(config, 401, 'INVALID_CREDENTIALS', 'Неверный логин или пароль');

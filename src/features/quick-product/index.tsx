@@ -12,6 +12,7 @@ import { Button, Dialog, Field, Input, Switch } from '@/shared/ui';
 const schema = z.object({
   name: z.string().trim().min(1, 'Как продавец называет деталь'),
   number: z.string().trim().optional(),
+  barcode: z.string().trim().optional(),
   brand: z.string().trim().optional(),
   price: z.string().trim().regex(/^(\d+([.,]\d{1,2})?)?$/, 'Число').optional(),
   vehicles: z.string().optional(),
@@ -49,8 +50,10 @@ export function QuickProductDialog({
   });
   useEffect(() => {
     if (open && initial) {
+      // Отсканировали неизвестный штрихкод — он сразу привяжется к новому товару
+      const isBarcode = /^\d{8,14}$/.test(initial.trim());
       const isNum = /\d/.test(initial) && initial.length < 25 && !/\s\S+\s/.test(initial);
-      reset({ noStockControl: false, ...(isNum ? { number: initial } : { name: initial }) });
+      reset({ noStockControl: false, ...(isBarcode ? { barcode: initial.trim() } : isNum ? { number: initial } : { name: initial }) });
     }
   }, [open, initial, reset]);
   const m = useMutation({
@@ -58,6 +61,7 @@ export function QuickProductDialog({
       productApi.quick({
         name: v.name,
         ...(v.number ? { number: v.number } : {}),
+        ...(v.barcode ? { barcode: v.barcode } : {}),
         ...(v.brand ? { brand: v.brand } : {}),
         ...(v.price ? { price: v.price.replace(',', '.') } : {}),
         ...(v.vehicles ? { vehicles: v.vehicles.split(',').map((s) => s.trim()).filter(Boolean) } : {}),
@@ -95,6 +99,11 @@ export function QuickProductDialog({
             <Input icon={<Tag />} placeholder="Toyota" {...register('brand')} />
           </Field>
         </div>
+        {watch('barcode') && (
+          <Field label="Штрихкод" hint="Отсканирован — привяжется к товару">
+            <Input className="font-mono" {...register('barcode')} />
+          </Field>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Розничная цена, сом" error={err.price?.message}>
             <Input icon={<Wallet />} inputMode="decimal" placeholder="2500" invalid={!!err.price} {...register('price')} />

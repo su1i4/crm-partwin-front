@@ -10,6 +10,7 @@ configureApi({
   getToken: () => useSession.getState().accessToken,
   getStoreId: () => useSession.getState().storeId,
   getRefresh: () => useSession.getState().refreshToken,
+  noRefresh: () => useSession.getState().user?.id === 'support',
   onToken: (t) => useSession.getState().setToken(t),
   onAuthLost: () => {
     useSession.getState().reset();

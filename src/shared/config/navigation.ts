@@ -212,6 +212,7 @@ export const NAV: NavSection[] = [
           { label: 'Словарь синонимов', to: '/settings/synonyms', ready: true },
           { label: 'Импорт и экспорт', to: '/settings/import', ready: true },
           { label: 'Журнал действий', to: '/settings/audit', ready: true },
+          { label: 'Доступ поддержки', to: '/settings/support', ready: true, permission: 'settings.manage' },
           { label: 'Мастер настройки', to: '/onboarding?again=1', ready: true, permission: 'settings.manage' },
           { label: 'Мобильная версия', to: '/m', ready: true },
         ],

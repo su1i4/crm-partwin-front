@@ -61,6 +61,8 @@ export interface Me {
     maxDiscountPercent: Decimalish | null;
   } | null;
   stores: MeStore[];
+  /** Вход поддержки платформы (ТЗ 24): не сотрудник магазина, права — из сеанса */
+  support?: { sessionId: string; canWrite: boolean; showMoney: boolean; expiresAt: string | null } | null;
 }
 
 // ── Дашборд ─────────────────────────────────────────────

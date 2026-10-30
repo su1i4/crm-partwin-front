@@ -1,9 +1,11 @@
 import { LogOut, Menu as MenuIcon, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, ShoppingCart, ClipboardList, Boxes, Sun, User, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { offline, useOffline } from '@/entities/pos-offline';
+import { supportApi, useSupportState } from '@/entities/platform';
 import { useCan, useMe, useSession } from '@/entities/session';
 import { useOnline } from '@/shared/hooks/use-online';
 import { useLogout } from '@/features/auth';
@@ -318,6 +320,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {!online && !pathname.startsWith('/pos') && (
             <div className="mx-4 mt-3 rounded-full bg-accent-soft px-4 py-1.5 text-center text-xs text-accent md:mx-0">Нет связи с сервером — показаны последние загруженные данные. Касса работает без сети.</div>
           )}
+          <SupportBanner />
           {env.demo && (
             <div className="mx-4 mt-3 rounded-full bg-warn-soft px-4 py-1.5 text-center text-xs text-warn md:mx-0">Демо-режим: данные ненастоящие, backend не подключён</div>
           )}
@@ -335,3 +338,61 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 export { useShell };
+
+/**
+ * Поддержка платформы (ТЗ 24). Вкладка поддержки — «Сеанс поддержки · до 14:30 · Выйти».
+ * У владельца — «В магазине работает поддержка» / «Поддержка просит доступ».
+ */
+function SupportBanner() {
+  const me = useMe().data;
+  const owner = !!me?.membership?.isOwner;
+  const st = useSupportState(owner);
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const box = 'mx-4 mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-full px-4 py-1.5 text-center text-xs md:mx-0';
+  if (me?.support) {
+    const sp = me.support;
+    return (
+      <div className={cn(box, 'bg-pill text-pill-ink')}>
+        <span>
+          Сеанс поддержки · {sp.canWrite ? 'с изменениями' : 'только просмотр'} · {sp.showMoney ? 'деньги видны' : 'деньги скрыты'}
+          {sp.expiresAt && ` · до ${new Date(sp.expiresAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`}
+        </span>
+        <button
+          className="underline"
+          onClick={() => {
+            useSession.getState().reset();
+            qc?.clear();
+            window.close();
+            nav('/login', { replace: true });
+          }}
+        >
+          Выйти
+        </button>
+      </div>
+    );
+  }
+  if (!owner || !st.data) return null;
+  const req = st.data.sessions.find((s) => s.status === 'requested');
+  const live = st.data.activeSession;
+  if (live)
+    return (
+      <div className={cn(box, 'bg-pill text-pill-ink')}>
+        <span>
+          В магазине работает поддержка ({live.adminName}){live.expiresAt && ` до ${new Date(live.expiresAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`} ·{' '}
+          {live.canWrite ? 'с изменениями' : 'только просмотр'}
+          {live.emergency ? ' · аварийный вход' : ''}
+        </span>
+        <button className="underline" onClick={() => void supportApi.revoke().then((x) => qc?.setQueryData(['support-state'], x))}>
+          Завершить
+        </button>
+      </div>
+    );
+  if (req)
+    return (
+      <Link to="/settings/support" className={cn(box, 'bg-warn-soft text-warn')}>
+        Поддержка просит доступ к магазину: {req.reason} — <span className="underline">ответить</span>
+      </Link>
+    );
+  return null;
+}

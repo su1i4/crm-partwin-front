@@ -22,6 +22,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { QuickProductDialog } from '@/features/quick-product';
 import { DOC_KIND, docApi, STATUS_LABEL, useDoc, useDocMeta, type DocType, type DocView, type LineError } from '@/entities/document';
 import { productApi } from '@/entities/product';
 import { useSession } from '@/entities/session';
@@ -146,6 +147,8 @@ export default function DocumentEditorPage() {
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [cpOpen, setCpOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
+  /** Не нашли товар при приёмке / вводе остатков — создаём тут же, без ухода в каталог */
+  const [quick, setQuick] = useState<string | null>(null);
   const [acceptOpen, setAcceptOpen] = useState(false);
   const [dupInvoice, setDupInvoice] = useState<string | null>(null);
   const add = useRef<ProductAddHandle>(null);
@@ -517,7 +520,7 @@ export default function DocumentEditorPage() {
             {!readOnly && (
               <div className="flex gap-2">
                 <div className="min-w-0 flex-1">
-                  <ProductAddField ref={add} onPick={addProduct} onNotFound={(q) => toast(`«${q}» не найден — создайте товар в каталоге`)} />
+                  <ProductAddField ref={add} onPick={addProduct} onNotFound={(q) => setQuick(q)} />
                 </div>
                 <Button className="h-12" onClick={() => setPasteOpen(true)} title="Вставить строки из Excel">
                   <ClipboardPaste /> <span className="hidden sm:inline">Из Excel</span>
@@ -697,6 +700,12 @@ export default function DocumentEditorPage() {
       </div>
 
       <CounterpartyPicker open={cpOpen} onOpenChange={setCpOpen} role="supplier" title="Поставщик" onPick={(c) => setH({ counterparty: { id: c.id, name: c.name } })} />
+      <QuickProductDialog
+        open={quick !== null}
+        onOpenChange={(v) => !v && setQuick(null)}
+        initial={quick ?? undefined}
+        onCreated={(p) => (addProduct({ id: p.id, name: p.name, sku: p.sku, mainNumber: p.mainNumber, brandName: p.brandName, baseUnit: p.baseUnit, price: p.retailPrice }), setDirty(true), setTimeout(() => add.current?.focus(), 50))}
+      />
       <PasteDialog open={pasteOpen} onOpenChange={setPasteOpen} withPrice={kind.price} onLines={(ls) => (setLines((x) => [...x, ...ls]), setDirty(true))} />
       {doc && inTransit && <AcceptDialog open={acceptOpen} onOpenChange={setAcceptOpen} doc={doc} />}
       <Dialog open={!!dupInvoice} onOpenChange={(v) => !v && setDupInvoice(null)} title="Такая накладная уже была" description={dupInvoice ?? ''}>
